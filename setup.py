@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="ofco",
-    version='0.1',
+    version="0.1",
     packages=["ofco"],
     entry_points={"console_scripts": ["ofco = ofco.main:main"]},
     author="Florian Aymanns",
@@ -14,10 +14,5 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NeLy-EPFL/ofco",
-    install_requires=[
-        "numpy",
-        "scipy",
-        "scikit-image",
-        "opencv-python",
-    ],
+    install_requires=["numpy", "scipy", "scikit-image", "opencv-python"],
 )
