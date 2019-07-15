@@ -3,7 +3,6 @@ import multiprocessing
 from timeit import default_timer as timer
 import numpy as np
 from skimage import io
-from numba import jit, prange
 
 from .utils import default_parameters, midway, crop_fit_size_center
 from .warping import bilinear_interpolate
