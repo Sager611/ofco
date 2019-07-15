@@ -210,7 +210,7 @@ def post_process(w, I1, I2, sigmaS, sigmaC):
 
 
 def default_parameters():
-    # lmbd stands for lambda which is a build in in python
+    # lmbd stands for lambda which is a build-in in python
     param = {
         "lmbd": 1000,
         "gamma": 100,
