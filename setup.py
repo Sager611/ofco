@@ -14,5 +14,5 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NeLy-EPFL/ofco",
-    install_requires=["numpy", "scipy", "scikit-image", "opencv-python", "docopt"],
+    install_requires=["numpy", "scipy", "scikit-image", "opencv-python", "docopt", "sphinx"],
 )
