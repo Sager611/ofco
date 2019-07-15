@@ -1,8 +1,24 @@
+"""
+ofco
+
+An optical flow-based motion correction algorithm for 2-photon calcium images.
+
+Usage:
+    ofco [-v | --verbose] [--frames=<int>] <stack1> <stack2> <output>
+    ofco -h | --help
+
+Options:
+    -h --help       Show this screen.
+    -v --verbose    Verbose output.
+    --frames=<int>        Number of frames to correct [default: all].
+"""
+
 import os
 import multiprocessing
 from timeit import default_timer as timer
 import numpy as np
 from skimage import io
+from docopt import docopt
 
 from .utils import default_parameters, midway, crop_fit_size_center
 from .warping import bilinear_interpolate
@@ -146,11 +162,19 @@ def main(stack1, stack2, output_dir, frames=-1, verbose=False, **kwargs):
     )
 
 
+def cli():
+    args = docopt(__doc__)
+    if args['--frames'] == 'all':
+        frames = -1
+    else:
+        frames = int(args['--frames'])
+    main(args['<stack1>'], args['<stack2>'], args['<output>'], verbose=args['--verbose'], frames=frames)
+
+
 if __name__ == "__main__":
-    main(
-        "/mnt/internal_hdd/aymanns/181220_Rpr_R57C10_GC6s_tdTom/Fly5/002_coronal/2p/red.tif",
-        "/mnt/internal_hdd/aymanns/181220_Rpr_R57C10_GC6s_tdTom/Fly5/002_coronal/2p/green.tif",
-        "results/test_181220_Fly5_002_module",
-        verbose=True,
-        frames=2,
-    )
+    args = docopt(__doc__)
+    if args['--frames'] == 'all':
+        frames = -1
+    else:
+        frames = int(args['--frames'])
+    main(args['<stack1>'], args['<stack2>'], args['<output>'], verbose=args['--verbose'], frames=frames)
