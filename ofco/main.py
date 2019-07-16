@@ -22,7 +22,7 @@ from docopt import docopt
 
 from .utils import default_parameters, midway, crop_fit_size_center
 from .warping import bilinear_interpolate
-from .of_l1_l2_fm_admm import of_l1_l2_fm_admm
+from .optflow import optical_flow_estimation
 
 
 def compute_motion(I1, I2, param):
@@ -32,7 +32,7 @@ def compute_motion(I1, I2, param):
     I2 = np.pad(I2, [15, 15], "edge")
 
     # Optical flow
-    w = of_l1_l2_fm_admm(I1, I2, sz0, param)
+    w = optical_flow_estimation(I1, I2, sz0, param)
 
     w = crop_fit_size_center(w, [sz0[0], sz0[1], 2])
     return w
