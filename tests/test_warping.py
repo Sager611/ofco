@@ -4,10 +4,8 @@ This module provides unit tests for the functions in ofco.warping.
 
 import numpy as np
 from scipy.signal import correlate2d
-import pytest
 
 from ofco.warping import *
-from skimage import io
 
 
 def test_bilinear_interpolate():
