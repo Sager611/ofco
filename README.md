@@ -1,7 +1,7 @@
 ofco
 ====
 
-This package provides a pure python implementation of the optic flow component of the motion correction algorithm implemented described in Chen\*, Hermans\* et al., *Nature Communications*, 2018.
+This package provides a pure python implementation of the optical flow component of the motion correction algorithm described in Chen\*, Hermans\* et al., *Nature Communications*, 2018.
 
 Installation
 ------------
