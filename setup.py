@@ -21,5 +21,6 @@ setup(
         "opencv-python",
         "docopt",
         "sphinx",
+        "pytest",
     ],
 )
