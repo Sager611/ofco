@@ -107,3 +107,6 @@ venv.bak/
 documentation/_build
 documentation/_static
 documentation/_templates
+
+# swp files
+**.swp
