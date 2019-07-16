@@ -3,6 +3,26 @@ from scipy.signal import convolve2d, correlate2d
 
 
 def bilinear_interpolate(img, x, y):
+    """
+    This function performs a bilinear interpolation on an image for a given
+    displacement vector field with components x and y.
+
+    Parameters
+    ----------
+    img : numpy array
+        Input image.
+    x : numpy array
+        X components of the displacement vector field in pixels.
+        Same dimensions as the input image.
+    y : numpy array
+        Y components of the displacement vector field in pixels.
+        Same dimensions as the input image.
+
+    Returns
+    -------
+    warped_image : numpy array
+        Image warped with the given vector field.
+    """
     xx, yy = np.meshgrid(np.arange(img.shape[1]), np.arange(img.shape[0]))
     x = np.asarray(xx + x)
     y = np.asarray(yy + y)
@@ -30,62 +50,87 @@ def bilinear_interpolate(img, x, y):
     return wa * Ia + wb * Ib + wc * Ic + wd * Id
 
 
-def interp2_bicubic(Z, XI, YI, Dxfilter):
-    # Implementation according to Numerical Recipes
-    Dyfilter = Dxfilter.transpose()
-    Dxyfilter = convolve2d(Dxfilter, Dyfilter, "full")
+def interp2_bicubic(img, xi, yi, dx_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
+    """
+    This function computes the bicubic 2d interpolation of a given image
+    at point xi and yi and the partial derivatives at these locations.
 
-    input_size = XI.shape
+    Parameters
+    ----------
+    img : numpy array
+        Input image.
+    xi : numpy array
+        X coordinates/indices of interpolation points.
+    yi : numpy array
+        Y coordinates/indices of interpolation points.
+    dx_filter : numpy array
+        Filter used to calculate the x derivative.
+        Default is np.array([[1, -8, 0, 8, -1]]) / 12.
+
+    Returns
+    -------
+    img_interp : numpy array
+        Interpolated image.
+    img_interp_dx : numpy array
+        The partial derivative of the interpolated image with respect to x.
+    img_interp_dy
+        The partial derivative of the interpolated image with respect to y.
+    """
+    # Implementation according to Numerical Recipes
+    dy_filter = dx_filter.transpose()
+    dxy_filter = convolve2d(dx_filter, dy_filter, "full")
+
+    input_size = xi.shape
 
     # Reshape input coordinates into a vector
-    XI = XI.flatten()
-    YI = YI.flatten()
+    xi = xi.flatten()
+    yi = yi.flatten()
 
     # Bound coordinates to valid region
-    sx = int(Z.shape[1])
-    sy = int(Z.shape[0])
+    sx = int(img.shape[1])
+    sy = int(img.shape[0])
 
     # Neighbor coordinates
-    fXI = np.floor(XI)
-    cXI = fXI + 1
-    fYI = np.floor(YI)
-    cYI = fYI + 1
+    fxi = np.floor(xi)
+    cxi = fxi + 1
+    fyi = np.floor(yi)
+    cyi = fyi + 1
 
-    indx = np.logical_or((fXI < 0), (cXI > sx - 1))
-    indx = np.logical_or((fYI < 0), indx)
-    indx = np.logical_or((cYI > sy - 1), indx)
+    indx = np.logical_or((fxi < 0), (cxi > sx - 1))
+    indx = np.logical_or((fyi < 0), indx)
+    indx = np.logical_or((cyi > sy - 1), indx)
 
-    fXI = np.clip(fXI, 0, sx - 1).astype(np.int)
-    cXI = np.clip(cXI, 0, sx - 1).astype(np.int)
-    fYI = np.clip(fYI, 0, sy - 1).astype(np.int)
-    cYI = np.clip(cYI, 0, sy - 1).astype(np.int)
+    fxi = np.clip(fxi, 0, sx - 1).astype(np.int)
+    cxi = np.clip(cxi, 0, sx - 1).astype(np.int)
+    fyi = np.clip(fyi, 0, sy - 1).astype(np.int)
+    cyi = np.clip(cyi, 0, sy - 1).astype(np.int)
 
     # Image at 4 neighbors
-    Z00 = Z[(fYI, fXI)]
-    Z01 = Z[(cYI, fXI)]
-    Z10 = Z[(fYI, cXI)]
-    Z11 = Z[(cYI, cXI)]
+    img00 = img[(fyi, fxi)]
+    img01 = img[(cyi, fxi)]
+    img10 = img[(fyi, cxi)]
+    img11 = img[(cyi, cxi)]
 
     # x-derivative at 4 neighbors
-    DX = correlate2d(Z, Dxfilter, boundary="symm", mode="same")
-    DX00 = DX[(fYI, fXI)]
-    DX01 = DX[(cYI, fXI)]
-    DX10 = DX[(fYI, cXI)]
-    DX11 = DX[(cYI, cXI)]
+    dx = correlate2d(img, dx_filter, boundary="symm", mode="same")
+    dx00 = dx[(fyi, fxi)]
+    dx01 = dx[(cyi, fxi)]
+    dx10 = dx[(fyi, cxi)]
+    dx11 = dx[(cyi, cxi)]
 
     # y-derivative at 4 neighbors
-    DY = correlate2d(Z, Dyfilter, boundary="symm", mode="same")
-    DY00 = DY[(fYI, fXI)]
-    DY01 = DY[(cYI, fXI)]
-    DY10 = DY[(fYI, cXI)]
-    DY11 = DY[(cYI, cXI)]
+    dy = correlate2d(img, dy_filter, boundary="symm", mode="same")
+    dy00 = dy[(fyi, fxi)]
+    dy01 = dy[(cyi, fxi)]
+    dy10 = dy[(fyi, cxi)]
+    dy11 = dy[(cyi, cxi)]
 
     # xy-derivative at 4 neighbors
-    DXY = correlate2d(Z, Dxyfilter, boundary="symm", mode="same")
-    DXY00 = DXY[(fYI, fXI)]
-    DXY01 = DXY[(cYI, fXI)]
-    DXY10 = DXY[(fYI, cXI)]
-    DXY11 = DXY[(cYI, cXI)]
+    dxy = correlate2d(img, dxy_filter, boundary="symm", mode="same")
+    dxy00 = dxy[(fyi, fxi)]
+    dxy01 = dxy[(cyi, fxi)]
+    dxy10 = dxy[(fyi, cxi)]
+    dxy11 = dxy[(cyi, cxi)]
 
     W = np.array(
         [
@@ -110,41 +155,41 @@ def interp2_bicubic(Z, XI, YI, Dxfilter):
 
     V = np.array(
         [
-            Z00,
-            Z10,
-            Z11,
-            Z01,
-            DX00,
-            DX10,
-            DX11,
-            DX01,
-            DY00,
-            DY10,
-            DY11,
-            DY01,
-            DXY00,
-            DXY10,
-            DXY11,
-            DXY01,
+            img00,
+            img10,
+            img11,
+            img01,
+            dx00,
+            dx10,
+            dx11,
+            dx01,
+            dy00,
+            dy10,
+            dy11,
+            dy01,
+            dxy00,
+            dxy10,
+            dxy11,
+            dxy01,
         ]
     )
 
     C = W @ V
 
-    alpha_x = np.reshape(XI - fXI, input_size)
-    alpha_y = np.reshape(YI - fYI, input_size)
+    alpha_x = np.reshape(xi - fxi, input_size)
+    alpha_y = np.reshape(yi - fyi, input_size)
 
     # Clip out-of-boundary pixels to boundary
     alpha_x[np.reshape(indx, input_size)] = 0
     alpha_y[np.reshape(indx, input_size)] = 0
 
-    fXI = np.reshape(fXI, input_size)
-    fYI = np.reshape(fYI, input_size)
+    fxi = np.reshape(fxi, input_size)
+    fyi = np.reshape(fyi, input_size)
 
     # Interpolation
-    ZI = np.zeros(input_size)
-    ZXI = np.zeros(input_size)
-    ZYI = np.zeros(input_size)
+    img_interp = np.zeros(input_size)
+    img_interp_dx = np.zeros(input_size)
+    img_interp_dy = np.zeros(input_size)
 
     idx = 0
     alpha_x_powers = np.ones((4,) + alpha_x.shape)
@@ -155,23 +200,23 @@ def interp2_bicubic(Z, XI, YI, Dxfilter):
 
     for i in range(4):
         for j in range(4):
-            ZI = (
-                ZI
+            img_interp = (
+                img_interp
                 + np.reshape(C[idx, :], input_size)
                 * alpha_x_powers[i]
                 * alpha_y_powers[j]
             )
             if i > 0:
-                ZXI = (
-                    ZXI
+                img_interp_dx = (
+                    img_interp_dx
                     + i
                     * np.reshape(C[idx, :], input_size)
                     * alpha_x_powers[i - 1]
                     * alpha_y_powers[j]
                 )
             if j > 0:
-                ZYI = (
-                    ZYI
+                img_interp_dy = (
+                    img_interp_dy
                     + j
                     * np.reshape(C[idx, :], input_size)
                     * alpha_x_powers[i]
@@ -179,6 +224,6 @@ def interp2_bicubic(Z, XI, YI, Dxfilter):
                 )
             idx = idx + 1
 
-    ZI[np.reshape(indx, input_size)] = np.nan
+    img_interp[np.reshape(indx, input_size)] = np.nan
 
-    return ZI, ZXI, ZYI
+    return img_interp, img_interp_dx, img_interp_dy
