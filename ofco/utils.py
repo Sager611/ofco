@@ -7,6 +7,29 @@ from .warping import interp2_bicubic
 
 
 def partial_deriv(imgs, w, deriv_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
+    """
+    Computes the partial derivatives for the three dimensions time, x and y.
+
+    Parameters
+    ----------
+    imgs : numpy array
+        Input images. A three dimensional array. The third dimension must
+        encode time and should have length 2.
+    w : numpy array
+        Displacement vector field. The third dimension encodes x and y.
+    deriv_filter : numpy array
+        The filter used to compute the derivative.
+        The default is np.array([[1, -8, 0, 8, -1]])/12.
+
+    Returns
+    -------
+    It : numpy array
+        Derivative with respect to time.
+    Ix : numpy array
+        Derivative with respect to x.
+    Iy : numpy array
+        Derivative with respect to y.
+    """
     xx, yy = np.meshgrid(np.arange(imgs.shape[1]), np.arange(imgs.shape[0]))
     xi = xx + w[:, :, 0]
     yi = yy + w[:, :, 1]
@@ -29,11 +52,22 @@ def partial_deriv(imgs, w, deriv_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
 
 def weighted_median(w, u):
     """
-    compute the weighted median
-    uo = \min_u \sum w(i)|uo - u(i)|
+    Computes the weighted median uo = \min_u \sum w(i)|uo - u(i)|
     using the formula (3.13) in Y. Li and Osher
     "A New Median Formula with Applications to PDE Based Denoising"
     applied to every corresponding columns of w and u
+
+    Parameters
+    ----------
+    w : numpy array
+        Weights. Two dimensional.
+    u : numpy array
+        Data. Two dimensional.
+
+    Returns
+    -------
+    uo : numpy array
+        Filtered data.
     """
     H, W = u.shape
     ir = np.argsort(u, axis=0)
@@ -212,8 +246,7 @@ def post_process(w, I1, I2, sigmaS, sigmaC):
 def default_parameters():
     # lmbd stands for lambda which is a build-in in python
     param = {
-        "lmbd": 1000,
-        "gamma": 100,
+        "lmbd": 800,
         "mu": 0.1,
         "nu": 0.1,
         "c2fSpacing": 1.5,
