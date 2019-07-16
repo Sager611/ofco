@@ -164,17 +164,29 @@ def main(stack1, stack2, output_dir, frames=-1, verbose=False, **kwargs):
 
 def cli():
     args = docopt(__doc__)
-    if args['--frames'] == 'all':
+    if args["--frames"] == "all":
         frames = -1
     else:
-        frames = int(args['--frames'])
-    main(args['<stack1>'], args['<stack2>'], args['<output>'], verbose=args['--verbose'], frames=frames)
+        frames = int(args["--frames"])
+    main(
+        args["<stack1>"],
+        args["<stack2>"],
+        args["<output>"],
+        verbose=args["--verbose"],
+        frames=frames,
+    )
 
 
 if __name__ == "__main__":
     args = docopt(__doc__)
-    if args['--frames'] == 'all':
+    if args["--frames"] == "all":
         frames = -1
     else:
-        frames = int(args['--frames'])
-    main(args['<stack1>'], args['<stack2>'], args['<output>'], verbose=args['--verbose'], frames=frames)
+        frames = int(args["--frames"])
+    main(
+        args["<stack1>"],
+        args["<stack2>"],
+        args["<output>"],
+        verbose=args["--verbose"],
+        frames=frames,
+    )
