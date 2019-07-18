@@ -6,7 +6,6 @@ import numpy as np
 from .utils import eigsDtD, partial_deriv, post_process
 
 
-@profile
 def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
 
     sigmaPreproc = 0.9
@@ -88,7 +87,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
             # Pre-computations
             It, Ix, Iy = partial_deriv(np.stack([I1, I2], axis=2), wl, deriv_filter)
 
-            Igrad =  Ix ** 2 + Iy ** 2 + 1e-3
+            Igrad = Ix ** 2 + Iy ** 2 + 1e-3
             thresh = Igrad / munu
 
             # Main iterations loop
@@ -96,15 +95,15 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
                 # Data update
                 r1 = z - wl - alpha / mu
                 t = (mu * r1 + nu * dwl) / munu
-                
+
                 rho = It + t[:, :, 0] * Ix + t[:, :, 1] * Iy
-                
+
                 idx1 = rho < -thresh
                 idx2 = rho > thresh
                 idx3 = np.abs(rho) <= thresh
 
                 dwl = t
-                
+
                 dwl[:, :, 0] += Ix * idx1 / munu
                 dwl[:, :, 1] += Iy * idx1 / munu
                 dwl[:, :, 0] -= Ix * idx2 / munu
@@ -117,24 +116,10 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
                 # Regularization update
                 muwalpha = mu * w + alpha
                 z[:, :, 0] = np.real(
-                    np.fft.ifft2(
-                        np.divide(
-                            np.fft.fft2(
-                                muwalpha[:, :, 0]
-                            ),
-                            eigs_DtD,
-                        )
-                    )
+                    np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 0]), eigs_DtD))
                 )
                 z[:, :, 1] = np.real(
-                    np.fft.ifft2(
-                        np.divide(
-                            np.fft.fft2(
-                                muwalpha[:, :, 1]
-                            ),
-                            eigs_DtD,
-                        )
-                    )
+                    np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 1]), eigs_DtD))
                 )
 
                 # Lagrange parameters update
@@ -152,9 +137,9 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
                     w_prev = w
                     continue
                 else:
-                    change = np.linalg.norm(
-                        w.flatten() - w_prev.flatten()
-                    ) / norm_w_prev
+                    change = (
+                        np.linalg.norm(w.flatten() - w_prev.flatten()) / norm_w_prev
+                    )
                     if change < param["changeTol"]:
                         break
                     w_prev = w
