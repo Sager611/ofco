@@ -6,6 +6,7 @@ import numpy as np
 from .utils import eigsDtD, partial_deriv, post_process
 
 
+@profile
 def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
 
     sigmaPreproc = 0.9
@@ -71,15 +72,14 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
 
         mu = param["mu"]
         nu = param["nu"]
+        munu = mu + nu
 
         eigs_DtD = eigsDtD(I1.shape[0], I1.shape[1], lmbd, mu)
         for iWarp in range(param["nbWarps"]):
             if verbose:
                 print("Warp {}\n".format(iWarp))
 
-            wPrev = wl
-            dul = np.zeros((wl.shape[0], wl.shape[1]))
-            dvl = np.zeros((wl.shape[0], wl.shape[1]))
+            w_prev = wl
             dwl = np.zeros((wl.shape))
 
             alpha = np.zeros((I1.shape[0], I1.shape[1], 2))
@@ -88,40 +88,39 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
             # Pre-computations
             It, Ix, Iy = partial_deriv(np.stack([I1, I2], axis=2), wl, deriv_filter)
 
-            Igrad = Ix ** 2 + Iy ** 2 + 1e-3
-            thresh = Igrad / (mu + nu)
+            Igrad =  Ix ** 2 + Iy ** 2 + 1e-3
+            thresh = Igrad / munu
 
             # Main iterations loop
             for it in range(param["maxIters"]):
                 # Data update
                 r1 = z - wl - alpha / mu
-                r2 = dwl
-                t = (mu * r1 + nu * r2) / (mu + nu)
-                t1 = t[:, :, 0]
-                t2 = t[:, :, 1]
-
-                rho = It + t1 * Ix + t2 * Iy
+                t = (mu * r1 + nu * dwl) / munu
+                
+                rho = It + t[:, :, 0] * Ix + t[:, :, 1] * Iy
+                
                 idx1 = rho < -thresh
                 idx2 = rho > thresh
                 idx3 = np.abs(rho) <= thresh
 
-                dul[idx1] = t1[idx1] + Ix[idx1] / (mu + nu)
-                dvl[idx1] = t2[idx1] + Iy[idx1] / (mu + nu)
+                dwl = t
+                
+                dwl[:, :, 0] += Ix * idx1 / munu
+                dwl[:, :, 1] += Iy * idx1 / munu
+                dwl[:, :, 0] -= Ix * idx2 / munu
+                dwl[:, :, 1] -= Iy * idx2 / munu
+                dwl[:, :, 0] -= (rho * Ix / Igrad) * idx3
+                dwl[:, :, 1] -= (rho * Iy / Igrad) * idx3
 
-                dul[idx2] = t1[idx2] - Ix[idx2] / (mu + nu)
-                dvl[idx2] = t2[idx2] - Iy[idx2] / (mu + nu)
-
-                dul[idx3] = t1[idx3] - rho[idx3] * Ix[idx3] / Igrad[idx3]
-                dvl[idx3] = t2[idx3] - rho[idx3] * Iy[idx3] / Igrad[idx3]
-
-                dwl = np.dstack((dul, dvl))
+                w = wl + dwl
 
                 # Regularization update
+                muwalpha = mu * w + alpha
                 z[:, :, 0] = np.real(
                     np.fft.ifft2(
                         np.divide(
                             np.fft.fft2(
-                                mu * (dwl[:, :, 0] + wl[:, :, 0]) + alpha[:, :, 0]
+                                muwalpha[:, :, 0]
                             ),
                             eigs_DtD,
                         )
@@ -131,7 +130,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
                     np.fft.ifft2(
                         np.divide(
                             np.fft.fft2(
-                                mu * (dwl[:, :, 1] + wl[:, :, 1]) + alpha[:, :, 1]
+                                muwalpha[:, :, 1]
                             ),
                             eigs_DtD,
                         )
@@ -139,26 +138,26 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
                 )
 
                 # Lagrange parameters update
-                alpha = alpha + mu * (wl + dwl - z)
+                alpha = alpha + mu * (w - z)
 
                 # Post-processing
                 if (it % param["iWM"]) == 0:
-                    w0 = wl + dwl
-                    w0 = post_process(w0, I1, I2, sigmaS, param["sigmaC"])
+                    w0 = post_process(w, I1, I2, sigmaS, param["sigmaC"])
                     dwl = w0 - wl
+                    w = wl + dwl
 
                 # End of iterations checking
-                w = wl + dwl
-                if np.linalg.norm(wPrev.flatten()) == 0:
-                    wPrev = w
+                norm_w_prev = np.linalg.norm(w_prev.flatten())
+                if norm_w_prev == 0:
+                    w_prev = w
                     continue
                 else:
                     change = np.linalg.norm(
-                        w.flatten() - wPrev.flatten()
-                    ) / np.linalg.norm(wPrev.flatten())
+                        w.flatten() - w_prev.flatten()
+                    ) / norm_w_prev
                     if change < param["changeTol"]:
                         break
-                    wPrev = w
+                    w_prev = w
 
             wl = wl + dwl
             wl = post_process(wl, I1, I2, sigmaS, param["sigmaC"])
