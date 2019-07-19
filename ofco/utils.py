@@ -71,10 +71,9 @@ def weighted_median(w, u):
     """
     H, W = u.shape
     ir = np.argsort(u, axis=0)
-    ic = np.tile(np.arange(W), [H, 1])
     # sorting again is faster than using indices
     sort_u = np.sort(u, axis=0)
-    w = w[(ir, ic)]
+    argsort_w = np.take_along_axis(w, ir, axis=0)
     k = np.ones((1, W))
     pp = -1 * np.sum(w, axis=0)
     for i in range(H - 1, -1, -1):
@@ -101,7 +100,7 @@ def denoise_color_weighted_medfilt2d(
     sz = sz[:2]
 
     if occ is None:
-        occ = ones(sz)
+        occ = np.ones(sz)
 
     if bfhsz is None:
         bfhsz = 10  # half window size
@@ -227,13 +226,17 @@ def detect_occlusion(w, images, sigma_d=0.3, sigma_i=20):
     return occ
 
 
-def post_process(w, I1, I2, sigmaS, sigmaC):
+def post_process(w, I1, I2, sigmaS, sigmaC, occlusion_handling=False):
     stack = np.stack([I1, I2], axis=2)
-    occ = detect_occlusion(w, stack)
+    if occlusion_handling:
+        occ = detect_occlusion(w, stack)
+        occ = medfilt2d(occ, [9, 9])
+    else:
+        occ = None
     wOut = denoise_color_weighted_medfilt2d(
         w,
         stack,
-        medfilt2d(occ, [9, 9]),
+        occ,
         int(np.ceil(sigmaS)),
         3,
         int(np.ceil(sigmaC)),

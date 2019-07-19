@@ -74,6 +74,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
         munu = mu + nu
 
         eigs_DtD = eigsDtD(I1.shape[0], I1.shape[1], lmbd, mu)
+
         for iWarp in range(param["nbWarps"]):
             if verbose:
                 print("Warp {}\n".format(iWarp))
