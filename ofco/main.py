@@ -44,9 +44,7 @@ def parallel_compute_motion(t):
     return compute_motion(i10, i2, global_param)
 
 
-def motion_compensate(
-    stack1, stack2, output1, output2, frames, param, verbose=False, parallel=True
-):
+def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=True):
     start = timer()
     stack1 = stack1[frames, :, :].astype(np.float64)
     stack1_rescale = (
@@ -103,12 +101,7 @@ def motion_compensate(
     if verbose:
         print("Time it took to warp images {}".format(end - start))
 
-    start = timer()
-    io.imsave(output1, stack1_warped.astype(np.float32))
-    io.imsave(output2, stack2_warped.astype(np.float32))
-    end = timer()
-    if verbose:
-        print("Time it took to save images {}".format(end - start))
+    return stack1_warped, stack2_warped
 
 
 def main(stack1, stack2, output_dir, frames=-1, verbose=False, **kwargs):
@@ -156,9 +149,16 @@ def main(stack1, stack2, output_dir, frames=-1, verbose=False, **kwargs):
     output1 = os.path.join(output_dir, "warped1.tif")
     output2 = os.path.join(output_dir, "warped2.tif")
 
-    motion_compensate(
-        stack1, stack2, output1, output2, frames, param, verbose, parallel=False
+    stack1_warped, stack2_warped = motion_compensate(
+        stack1, stack2, frames, param, verbose, parallel=False
     )
+
+    start = timer()
+    io.imsave(output1, stack1_warped.astype(np.float32))
+    io.imsave(output2, stack2_warped.astype(np.float32))
+    end = timer()
+    if verbose:
+        print("Time it took to save images {}".format(end - start))
 
 
 def cli():

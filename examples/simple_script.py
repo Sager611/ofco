@@ -1,4 +1,6 @@
 from skimage import io
+import numpy as np
+
 from ofco import motion_compensate
 from ofco.utils import default_parameters
 
@@ -10,15 +12,11 @@ stack2 = io.imread(
 )
 
 param = default_parameters()
-frames = range(20)
+frames = range(10)  # len(stack1))
 
-motion_compensate(
-    stack1,
-    stack2,
-    "warped1.tif",
-    "warped2.tif",
-    frames,
-    param,
-    parallel=True,
-    verbose=True,
+stack1_warped, stack2_warped = motion_compensate(
+    stack1, stack2, frames, param, parallel=True, verbose=True
 )
+
+io.imsave("warped1.tif", stack1_warped.astype(np.float32))
+io.imsave("warped2.tif", stack2_warped.astype(np.float32))
