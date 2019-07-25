@@ -12,11 +12,11 @@ stack2 = io.imread(
 )
 
 param = default_parameters()
-frames = range(10)  # len(stack1))
+frames = range(len(stack1))
 
 stack1_warped, stack2_warped = motion_compensate(
     stack1, stack2, frames, param, parallel=True, verbose=True
 )
 
-io.imsave("warped1.tif", stack1_warped.astype(np.float32))
-io.imsave("warped2.tif", stack2_warped.astype(np.float32))
+io.imsave("warped1.tif", stack1_warped)
+io.imsave("warped2.tif", stack2_warped)

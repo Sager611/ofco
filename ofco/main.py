@@ -46,11 +46,11 @@ def parallel_compute_motion(t):
 
 def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=True):
     start = timer()
-    stack1 = stack1[frames, :, :].astype(np.float64)
+    stack1 = stack1[frames, :, :]
     stack1_rescale = (
         (stack1 - np.amin(stack1)) / (np.amax(stack1) - np.amin(stack1)) * 255
     )
-    stack2 = stack2[frames, :, :].astype(np.float64)
+    stack2 = stack2[frames, :, :]
     end = timer()
     if verbose:
         print("Time it took to normalize images {}".format(end - start))
@@ -73,8 +73,11 @@ def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=Tru
         global global_param
         global_param = param
         with mp.Pool(2) as pool:
-            output = pool.map(parallel_compute_motion, range(len(frames) - 1))
-        w = np.array(output)
+            w = pool.map(parallel_compute_motion, range(len(frames) - 1))
+        w = np.array(w)
+        del global_stack1_rescale
+        del global_i1
+        del global_param
     else:
         w = np.zeros(w_shape)
         for t in range(len(frames) - 1):
@@ -83,9 +86,14 @@ def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=Tru
             i2 = stack1_rescale[t + 1, :, :]
             [i10, i2] = midway(i1, i2)
             w[t, :, :, :] = compute_motion(i10, i2, param)
+        del i2
+        del i10
     end = timer()
     if verbose:
         print("Time it took to compute motion field w {}".format(end - start))
+
+    del i1
+    del stack1_rescale
 
     start = timer()
     stack1_warped = stack1
