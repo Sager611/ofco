@@ -6,7 +6,7 @@ import numpy as np
 from .utils import eigsDtD, partial_deriv, post_process
 
 
-def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
+def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
     sigmaPreproc = 0.9
     I1 = gaussian_filter(I1, sigmaPreproc, mode="mirror")
@@ -15,12 +15,14 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
     deriv_filter = np.array([[1, -8, 0, 8, -1]]) / 12.0
 
     # coarse-to-fine parameters
-    minSizeC2f = 10
+    minSizeC2f = param["minSizeC2f"]
     c2fLevels = int(
         math.ceil(
             math.log(minSizeC2f / max(I1.shape)) / math.log(1 / param["c2fSpacing"])
         )
     )
+    c2fLevels = max(c2fLevels, 1)
+
     factor = math.sqrt(2)
     smooth_sigma = math.sqrt(param["c2fSpacing"]) / factor
     I1C2f = reversed(
@@ -51,6 +53,11 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False):
 
     # Initationlization
     wl = np.zeros((I1.shape[0], I1.shape[1], 2))
+    if initial_w is not None:
+        if not np.all(initial_w.shape == wl.shape):
+            raise ValueError(f'initial_w has wrong shape. Given shape is {initial_w.shape} expected {wl.shape}')
+        wl = initial_w
+        
 
     # Coarse to fine
     for l, I1, I2 in zip(range(c2fLevels - 1, -1, -1), I1C2f, I2C2f):

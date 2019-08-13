@@ -25,14 +25,16 @@ from .warping import bilinear_interpolate
 from .optflow import optical_flow_estimation
 
 
-def compute_motion(I1, I2, param):
+def compute_motion(I1, I2, param, initial_w=None):
     sz0 = I1.shape
 
-    I1 = np.pad(I1, [15, 15], "edge")
-    I2 = np.pad(I2, [15, 15], "edge")
+    I1 = np.pad(I1, [param['padding'], param['padding']], "edge")
+    I2 = np.pad(I2, [param['padding'], param['padding']], "edge")
+    if initial_w is not None:
+        initial_w = np.pad(initial_w, [(param['padding'], param['padding']), (param['padding'], param['padding']), (0, 0)], mode='constant', constant_values=0)
 
     # Optical flow
-    w = optical_flow_estimation(I1, I2, sz0, param)
+    w = optical_flow_estimation(I1, I2, sz0, param, initial_w=initial_w)
 
     w = crop_fit_size_center(w, [sz0[0], sz0[1], 2])
     return w
@@ -41,10 +43,26 @@ def compute_motion(I1, I2, param):
 def parallel_compute_motion(t):
     i2 = global_stack1_rescale[t + 1, :, :].copy()
     [i10, i2] = midway(global_i1.copy(), i2)
-    return compute_motion(i10, i2, global_param)
+    return compute_motion(i10, i2, global_param, global_initial_w[t])
+    
+
+def apply_motion_field(stack1, stack2, w, frames):
+    stack1_warped = stack1
+    stack2_warped = stack2
+    for t in range(len(frames) - 1):
+        stack1_warped[t + 1, :, :] = bilinear_interpolate(
+            stack1[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
+        )
+        stack2_warped[t + 1, :, :] = bilinear_interpolate(
+            stack2[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
+        )
+    return stack1_warped, stack2_warped
 
 
-def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=True):
+def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=True, w_output=None, initial_w=None):
+    if initial_w is not None and len(frames) -1 != len(initial_w):
+        raise ValueError("Number of frames does not match the number of displacement vector fields provided in initial_w.")
+
     start = timer()
     stack1 = stack1[frames, :, :]
     stack1_rescale = (
@@ -72,6 +90,8 @@ def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=Tru
         global_i1 = i1
         global global_param
         global_param = param
+        global global_initial_w
+        global_initial_w = initial_w
         with mp.Pool(2) as pool:
             w = pool.map(parallel_compute_motion, range(len(frames) - 1))
         w = np.array(w)
@@ -85,7 +105,7 @@ def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=Tru
                 print("Frame {}\n".format(t))
             i2 = stack1_rescale[t + 1, :, :]
             [i10, i2] = midway(i1, i2)
-            w[t, :, :, :] = compute_motion(i10, i2, param)
+            w[t, :, :, :] = compute_motion(i10, i2, param, initial_w[t])
         del i2
         del i10
     end = timer()
@@ -95,16 +115,11 @@ def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=Tru
     del i1
     del stack1_rescale
 
+    if w_output is not None:
+        np.save(w_output, w)
+
     start = timer()
-    stack1_warped = stack1
-    stack2_warped = stack2
-    for t in range(len(frames) - 1):
-        stack1_warped[t + 1, :, :] = bilinear_interpolate(
-            stack1[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
-        )
-        stack2_warped[t + 1, :, :] = bilinear_interpolate(
-            stack2[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
-        )
+    stack1_warped, stack2_warped = apply_motion_field(stack1, stack2, w, frames)
     end = timer()
     if verbose:
         print("Time it took to warp images {}".format(end - start))

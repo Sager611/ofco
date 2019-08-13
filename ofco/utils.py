@@ -249,10 +249,12 @@ def post_process(w, I1, I2, sigmaS, sigmaC, occlusion_handling=False):
 def default_parameters():
     # lmbd stands for lambda which is a build-in in python
     param = {
+        "padding": 15,
         "lmbd": 800,
         "mu": 0.1,
         "nu": 0.1,
         "c2fSpacing": 1.5,
+        "minSizeC2f": 10,
         "threshMatch": 70,
         "occThresh": 0.5,
         "consistencyTol": 2,
@@ -263,6 +265,28 @@ def default_parameters():
         "maxIters": 150,
         "iWM": 50,
     }
+    return param
+
+
+def refinement_parameters(img_shape):
+    """
+    Returns parameters that can be used to run a quick refinement of a
+    given solution. The parameters it generates lead to a single pyramid
+    level, i.e. the provided initial solution must be a close estimate of
+    the true solution.
+
+    Parameters
+    ----------
+    img_shape : tuple of integers
+        Shape of the image whose warping should be refined.
+
+    Returns
+    -------
+    param : dict
+        Parameter dictionary for refinement.
+    """
+    param = default_parameters()
+    param["minSizeC2f"] = max(img_shape) + 2 * param["padding"]
     return param
 
 
