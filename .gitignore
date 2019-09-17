@@ -110,3 +110,7 @@ documentation/_templates
 
 # swp files
 **.swp
+
+# examples
+examples/*.tif
+examples/*.npy
