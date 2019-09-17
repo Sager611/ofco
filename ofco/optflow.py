@@ -55,9 +55,10 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
     wl = np.zeros((I1.shape[0], I1.shape[1], 2))
     if initial_w is not None:
         if not np.all(initial_w.shape == wl.shape):
-            raise ValueError(f'initial_w has wrong shape. Given shape is {initial_w.shape} expected {wl.shape}')
+            raise ValueError(
+                f"initial_w has wrong shape. Given shape is {initial_w.shape} expected {wl.shape}"
+            )
         wl = initial_w
-        
 
     # Coarse to fine
     for l, I1, I2 in zip(range(c2fLevels - 1, -1, -1), I1C2f, I2C2f):
