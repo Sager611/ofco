@@ -28,10 +28,19 @@ from .optflow import optical_flow_estimation
 def compute_motion(I1, I2, param, initial_w=None):
     sz0 = I1.shape
 
-    I1 = np.pad(I1, [param['padding'], param['padding']], "edge")
-    I2 = np.pad(I2, [param['padding'], param['padding']], "edge")
+    I1 = np.pad(I1, [param["padding"], param["padding"]], "edge")
+    I2 = np.pad(I2, [param["padding"], param["padding"]], "edge")
     if initial_w is not None:
-        initial_w = np.pad(initial_w, [(param['padding'], param['padding']), (param['padding'], param['padding']), (0, 0)], mode='constant', constant_values=0)
+        initial_w = np.pad(
+            initial_w,
+            [
+                (param["padding"], param["padding"]),
+                (param["padding"], param["padding"]),
+                (0, 0),
+            ],
+            mode="constant",
+            constant_values=0,
+        )
 
     # Optical flow
     w = optical_flow_estimation(I1, I2, sz0, param, initial_w=initial_w)
@@ -43,25 +52,46 @@ def compute_motion(I1, I2, param, initial_w=None):
 def parallel_compute_motion(t):
     i2 = global_stack1_rescale[t + 1, :, :].copy()
     [i10, i2] = midway(global_i1.copy(), i2)
-    return compute_motion(i10, i2, global_param, global_initial_w[t])
-    
+    if global_initial_w is not None:
+        return compute_motion(i10, i2, global_param, global_initial_w[t])
+    else:
+        return compute_motion(i10, i2, global_param)
+
 
 def apply_motion_field(stack1, stack2, w, frames):
+
     stack1_warped = stack1
-    stack2_warped = stack2
+
+    if stack2 is not None:
+        stack2_warped = stack2
+    else:
+        stack2_warped = None
+
     for t in range(len(frames) - 1):
         stack1_warped[t + 1, :, :] = bilinear_interpolate(
             stack1[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
         )
-        stack2_warped[t + 1, :, :] = bilinear_interpolate(
-            stack2[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
-        )
+        if stack2 is not None:
+            stack2_warped[t + 1, :, :] = bilinear_interpolate(
+                stack2[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
+            )
     return stack1_warped, stack2_warped
 
 
-def motion_compensate(stack1, stack2, frames, param, verbose=False, parallel=True, w_output=None, initial_w=None):
-    if initial_w is not None and len(frames) -1 != len(initial_w):
-        raise ValueError("Number of frames does not match the number of displacement vector fields provided in initial_w.")
+def motion_compensate(
+    stack1,
+    stack2,
+    frames,
+    param,
+    verbose=False,
+    parallel=True,
+    w_output=None,
+    initial_w=None,
+):
+    if initial_w is not None and len(frames) - 1 != len(initial_w):
+        raise ValueError(
+            "Number of frames does not match the number of displacement vector fields provided in initial_w."
+        )
 
     start = timer()
     stack1 = stack1[frames, :, :]
@@ -133,8 +163,9 @@ def main(stack1, stack2, output_dir, frames=-1, verbose=False, **kwargs):
     ----------
     stack1 : string
         Path to stack with constant brightness (e.g. tdTom).
-    stack2 : string
+    stack2 : string or None
         Path to stack with functional information (e.g. GCamP).
+        If None, None is returned instead of a warped image.
     output_dir : string
         Path to the output directory. If it does not exist it is
         created.
