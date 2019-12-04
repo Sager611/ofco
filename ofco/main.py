@@ -87,6 +87,7 @@ def motion_compensate(
     parallel=True,
     w_output=None,
     initial_w=None,
+    ref_frame=None,
 ):
     if initial_w is not None and len(frames) - 1 != len(initial_w):
         raise ValueError(
@@ -95,10 +96,14 @@ def motion_compensate(
 
     start = timer()
     stack1 = stack1[frames, :, :]
+    stack2 = stack2[frames, :, :]
+    if ref_frame is not None:
+        stack1 = np.concatenate((ref_frame[np.newaxis], stack1), axis=0)
+        stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0)
+        frames = (0,) + tuple(frames)
     stack1_rescale = (
         (stack1 - np.amin(stack1)) / (np.amax(stack1) - np.amin(stack1)) * 255
     )
-    stack2 = stack2[frames, :, :]
     end = timer()
     if verbose:
         print("Time it took to normalize images {}".format(end - start))
@@ -153,6 +158,10 @@ def motion_compensate(
     end = timer()
     if verbose:
         print("Time it took to warp images {}".format(end - start))
+
+    if ref_frame is not None:
+        stack1_warped = stack1_warped[1:]
+        stack2_warped = stack2_warped[2:]
 
     return stack1_warped, stack2_warped
 
