@@ -150,9 +150,6 @@ def motion_compensate(
     del i1
     del stack1_rescale
 
-    if w_output is not None:
-        np.save(w_output, w)
-
     start = timer()
     stack1_warped, stack2_warped = apply_motion_field(stack1, stack2, w, frames)
     end = timer()
@@ -160,8 +157,12 @@ def motion_compensate(
         print("Time it took to warp images {}".format(end - start))
 
     if ref_frame is not None:
+        w = w[1:]
         stack1_warped = stack1_warped[1:]
-        stack2_warped = stack2_warped[2:]
+        stack2_warped = stack2_warped[1:]
+
+    if w_output is not None:
+        np.save(w_output, w)
 
     return stack1_warped, stack2_warped
 
