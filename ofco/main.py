@@ -140,7 +140,10 @@ def motion_compensate(
                 print("Frame {}\n".format(t))
             i2 = stack1_rescale[t + 1, :, :]
             [i10, i2] = midway(i1, i2)
-            w[t, :, :, :] = compute_motion(i10, i2, param, initial_w[t])
+            if initial_w is not None:
+                w[t, :, :, :] = compute_motion(i10, i2, param, initial_w[t])
+            else:
+                w[t, :, :, :] = compute_motion(i10, i2, param)
         del i2
         del i10
     end = timer()
