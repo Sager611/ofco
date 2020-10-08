@@ -62,10 +62,7 @@ def apply_motion_field(stack1, stack2, w, frames):
 
     stack1_warped = stack1
 
-    if stack2 is not None:
-        stack2_warped = stack2
-    else:
-        stack2_warped = None
+    stack2_warped = stack2  # simplified this expression
 
     for t in range(len(frames) - 1):
         stack1_warped[t + 1, :, :] = bilinear_interpolate(
@@ -96,10 +93,10 @@ def motion_compensate(
 
     start = timer()
     stack1 = stack1[frames, :, :]
-    stack2 = stack2[frames, :, :]
+    stack2 = stack2[frames, :, :] if stack2 is not None else None
     if ref_frame is not None:
         stack1 = np.concatenate((ref_frame[np.newaxis], stack1), axis=0)
-        stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0)
+        stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0) if stack2 is not None else None
         frames = (0,) + tuple(frames)
     stack1_rescale = (
         (stack1 - np.amin(stack1)) / (np.amax(stack1) - np.amin(stack1)) * 255
@@ -162,7 +159,7 @@ def motion_compensate(
     if ref_frame is not None:
         w = w[1:]
         stack1_warped = stack1_warped[1:]
-        stack2_warped = stack2_warped[1:]
+        stack2_warped = stack2_warped[1:] if stack2_warped is not None else None
 
     if w_output is not None:
         np.save(w_output, w)
