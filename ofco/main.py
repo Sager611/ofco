@@ -96,10 +96,12 @@ def motion_compensate(
 
     start = timer()
     stack1 = stack1[frames, :, :]
-    stack2 = stack2[frames, :, :]
+    if stack2 is not None:
+        stack2 = stack2[frames, :, :]
     if ref_frame is not None:
         stack1 = np.concatenate((ref_frame[np.newaxis], stack1), axis=0)
-        stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0)
+        if stack2 is not None: 
+            stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0)
         frames = (0,) + tuple(frames)
     stack1_rescale = (
         (stack1 - np.amin(stack1)) / (np.amax(stack1) - np.amin(stack1)) * 255
@@ -127,7 +129,7 @@ def motion_compensate(
         global_param = param
         global global_initial_w
         global_initial_w = initial_w
-        with mp.Pool(2) as pool:
+        with mp.Pool(28) as pool:
             w = pool.map(parallel_compute_motion, range(len(frames) - 1))
         w = np.array(w)
         del global_stack1_rescale
@@ -160,9 +162,9 @@ def motion_compensate(
         print("Time it took to warp images {}".format(end - start))
 
     if ref_frame is not None:
-        w = w[1:]
         stack1_warped = stack1_warped[1:]
-        stack2_warped = stack2_warped[1:]
+        if stack2_warped is not None:
+            stack2_warped = stack2_warped[1:]
 
     if w_output is not None:
         np.save(w_output, w)
