@@ -15,6 +15,7 @@ Options:
 
 import os
 import multiprocessing as mp
+from tqdm import tqdm
 from timeit import default_timer as timer
 import numpy as np
 from skimage import io
@@ -62,8 +63,8 @@ def apply_motion_field(stack1, stack2, w, frames):
 
     stack1_warped = stack1
 
-    stack2_warped = stack2  # simplified this expression
-
+    stack2_warped = stack2
+    # TODO: Fine for now, but this only works if frames is a range from 0 to N_frames and the 0th frame is the reference frame.
     for t in range(len(frames) - 1):
         stack1_warped[t + 1, :, :] = bilinear_interpolate(
             stack1[t + 1, :, :], w[t, :, :, 0], w[t, :, :, 1]
@@ -93,11 +94,13 @@ def motion_compensate(
 
     start = timer()
     stack1 = stack1[frames, :, :]
-    stack2 = stack2[frames, :, :] if stack2 is not None else None
+    if stack2 is not None:
+        stack2 = stack2[frames, :, :]
     if ref_frame is not None:
         stack1 = np.concatenate((ref_frame[np.newaxis], stack1), axis=0)
-        stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0) if stack2 is not None else None
-        frames = (0,) + tuple(frames)
+        if stack2 is not None:
+            stack2 = np.concatenate((ref_frame[np.newaxis], stack2), axis=0)
+    frames = tuple(np.arange(stack1.shape[0]))
     stack1_rescale = (
         (stack1 - np.amin(stack1)) / (np.amax(stack1) - np.amin(stack1)) * 255
     )
@@ -114,7 +117,7 @@ def motion_compensate(
         2,
     )
 
-    i1 = stack1_rescale[frames[0], :, :]
+    i1 = stack1_rescale[0, :, :]
     if parallel:
         global global_stack1_rescale
         global_stack1_rescale = stack1_rescale
@@ -124,15 +127,28 @@ def motion_compensate(
         global_param = param
         global global_initial_w
         global_initial_w = initial_w
-        with mp.Pool(2) as pool:
-            w = pool.map(parallel_compute_motion, range(len(frames) - 1))
-        w = np.array(w)
+
+        N_process = 2
+        w = np.zeros(w_shape)
+        if verbose:
+            print("starting pool processing to compute motion fields of {} frames with {} processes".format(len(frames) - 1, N_process))
+        with mp.Pool(N_process) as pool:
+            if verbose:
+                for i, x_i in enumerate(tqdm(pool.imap(parallel_compute_motion, 
+                                                    range(len(frames) - 1)), 
+                                            total=len(frames) - 1)):
+                    w[i, :, :, :] = x_i
+            else:
+                w = pool.map(parallel_compute_motion, range(len(frames) - 1))
+                w = np.array(w)
         del global_stack1_rescale
         del global_i1
         del global_param
     else:
         w = np.zeros(w_shape)
-        for t in range(len(frames) - 1):
+        if verbose:
+            print("starting non-parallel processing to compute motion fields")
+        for t in tqdm(range(len(frames) - 1)):
             if verbose:
                 print("Frame {}\n".format(t))
             i2 = stack1_rescale[t + 1, :, :]
@@ -157,9 +173,9 @@ def motion_compensate(
         print("Time it took to warp images {}".format(end - start))
 
     if ref_frame is not None:
-        w = w[1:]
         stack1_warped = stack1_warped[1:]
-        stack2_warped = stack2_warped[1:] if stack2_warped is not None else None
+        if stack2_warped is not None:
+            stack2_warped = stack2_warped[1:]
 
     if w_output is not None:
         np.save(w_output, w)
