@@ -25,8 +25,10 @@ def reassamble_vector_fields(folder):
     for i in range(n_files):
         path = os.path.join(folder, f"w_{i}{tag}.npy")
         sub_fields = np.load(path)
+        print(path, sub_fields.shape)
         vector_fields.append(sub_fields)
     vector_field = np.concatenate(vector_fields, axis=0)
+    print(vector_field.shape)
     np.save(os.path.join(folder, f"w{tag}.npy"), vector_field)
 
 

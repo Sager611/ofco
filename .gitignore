@@ -114,3 +114,6 @@ documentation/_templates
 # examples
 examples/*.tif
 examples/*.npy
+
+# slurm output
+**.out
