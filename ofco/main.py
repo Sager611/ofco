@@ -14,18 +14,23 @@ Options:
 """
 
 import os
+import time
+import logging
 import multiprocessing as mp
+from concurrent.futures.thread import ThreadPoolExecutor
 from timeit import default_timer as timer
 import numpy as np
 from skimage import io
 from docopt import docopt
 
-from .utils import default_parameters, midway, crop_fit_size_center
+from .utils import default_parameters, midway, crop_fit_size_center, get_strategy
 from .warping import bilinear_interpolate
 from .optflow import optical_flow_estimation
 
+_LOGGER = logging.getLogger('ofco')
 
-def compute_motion(I1, I2, param, initial_w=None):
+
+def compute_motion(I1, I2, param, initial_w=None, verbose=False):
     sz0 = I1.shape
 
     I1 = np.pad(I1, [param["padding"], param["padding"]], "edge")
@@ -43,19 +48,10 @@ def compute_motion(I1, I2, param, initial_w=None):
         )
 
     # Optical flow
-    w = optical_flow_estimation(I1, I2, sz0, param, initial_w=initial_w)
+    w = optical_flow_estimation(I1, I2, sz0, param, initial_w=initial_w, verbose=verbose)
 
     w = crop_fit_size_center(w, [sz0[0], sz0[1], 2])
     return w
-
-
-def parallel_compute_motion(t):
-    i2 = global_stack1_rescale[t + 1, :, :].copy()
-    [i10, i2] = midway(global_i1.copy(), i2)
-    if global_initial_w is not None:
-        return compute_motion(i10, i2, global_param, global_initial_w[t])
-    else:
-        return compute_motion(i10, i2, global_param)
 
 
 def apply_motion_field(stack1, stack2, w, frames):
@@ -108,7 +104,7 @@ def motion_compensate(
     )
     end = timer()
     if verbose:
-        print("Time it took to normalize images {}".format(end - start))
+        _LOGGER.info("Time it took to normalize images {}".format(end - start))
 
     # Motion estimation
     start = timer()
@@ -120,34 +116,77 @@ def motion_compensate(
     )
 
     i1 = stack1_rescale[frames[0], :, :]
-    if parallel:
-        global global_stack1_rescale
-        global_stack1_rescale = stack1_rescale
-        global global_i1
-        global_i1 = i1
-        global global_param
-        global_param = param
-        global global_initial_w
-        global_initial_w = initial_w
-        with mp.Pool(28) as pool:
-            w = pool.map(parallel_compute_motion, range(len(frames) - 1))
-        w = np.array(w)
-        del global_stack1_rescale
-        del global_i1
-        del global_param
-    else:
-        w = np.zeros(w_shape)
-        for t in range(len(frames) - 1):
-            if verbose:
-                print("Frame {}\n".format(t))
-            i2 = stack1_rescale[t + 1, :, :]
-            [i10, i2] = midway(i1, i2)
-            if initial_w is not None:
-                w[t, :, :, :] = compute_motion(i10, i2, param, initial_w[t])
-            else:
-                w[t, :, :, :] = compute_motion(i10, i2, param)
-        del i2
-        del i10
+    with get_strategy('TPU').scope():
+        if parallel:
+            #############################################################
+            # Adrian Sager 15/11/2021:
+            #     Changed from program-parallel to thread-parallel
+            #
+            #############################################################
+            ## THREAD-LEVEL
+            def parallel_compute_motion(t, frame_rescale):
+                t1 = time.perf_counter()
+                i2 = frame_rescale
+                [i10, i2] = midway(i1, i2)
+                if initial_w is not None:
+                    res = compute_motion(i10, i2, param, initial_w[t], verbose=verbose)
+                else:
+                    res = compute_motion(i10, i2, param, verbose=verbose)
+                t2 = time.perf_counter()
+                if verbose:
+                    _LOGGER.info(f'COMPUTED FRAME {t} IN {t2-t1 : .2f}s \n')
+                return res
+
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(parallel_compute_motion,
+                                    t, stack1_rescale[t + 1, :, :])
+                    for t in range(len(frames) - 1)
+                ]
+                w = np.array([f.result() for f in futures])
+            
+            ## PROCESS-PARALLEL
+            # def parallel_compute_motion(t):
+            #     t1 = time.perf_counter()
+            #     i2 = global_stack1_rescale[t + 1, :, :].copy()
+            #     [i10, i2] = midway(global_i1.copy(), i2)
+            #     if global_initial_w is not None:
+            #         res = compute_motion(i10, i2, global_param, global_initial_w[t])
+            #     else:
+            #         res = compute_motion(i10, i2, global_param)
+            #     t2 = time.perf_counter()
+            #     if verbose:
+            #         _LOGGER.info(f'COMPUTED FRAME {t} IN {t2-t1 : .2f}s \n')
+            #     return res
+
+            # _LOGGER.info('PROCESS-LEVEL')
+            # global global_stack1_rescale
+            # global_stack1_rescale = stack1_rescale
+            # global global_i1
+            # global_i1 = i1
+            # global global_param
+            # global_param = param
+            # global global_initial_w
+            # global_initial_w = initial_w
+            # with mp.Pool(28) as pool:
+            #     w = pool.map(parallel_compute_motion, range(len(frames) - 1))
+            # w = np.array(w)
+            # del global_stack1_rescale
+            # del global_i1
+            # del global_param
+        else:
+            w = np.zeros(w_shape)
+            for t in range(len(frames) - 1):
+                if verbose:
+                    print("Frame {}\n".format(t))
+                i2 = stack1_rescale[t + 1, :, :]
+                [i10, i2] = midway(i1, i2)
+                if initial_w is not None:
+                    w[t, :, :, :] = compute_motion(i10, i2, param, initial_w[t], verbose=verbose)
+                else:
+                    w[t, :, :, :] = compute_motion(i10, i2, param, verbose=verbose)
+            del i2
+            del i10
     end = timer()
     if verbose:
         print("Time it took to compute motion field w {}".format(end - start))

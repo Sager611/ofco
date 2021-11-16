@@ -1,9 +1,13 @@
 from scipy.ndimage import gaussian_filter
 import math
+import logging
 from skimage import transform
 import numpy as np
+import tensorflow as tf
 
 from .utils import eigsDtD, partial_deriv, post_process
+
+_LOGGER = logging.getLogger('ofco')
 
 
 def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
@@ -62,9 +66,6 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
     # Coarse to fine
     for l, I1, I2 in zip(range(c2fLevels - 1, -1, -1), I1C2f, I2C2f):
-        if verbose:
-            print("\nScale {}\n".format(l))
-
         # Scaled data
         sigmaS = sigmaSSegC2f[l]
         lmbd = lambdaC2f[l]
@@ -84,9 +85,6 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
         eigs_DtD = eigsDtD(I1.shape[0], I1.shape[1], lmbd, mu)
 
         for iWarp in range(param["nbWarps"]):
-            if verbose:
-                print("Warp {}\n".format(iWarp))
-
             w_prev = wl
             dwl = np.zeros((wl.shape))
 
@@ -110,6 +108,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                 idx1 = rho < -thresh
                 idx2 = rho > thresh
                 idx3 = np.abs(rho) <= thresh
+                # idx3 = tf.cast(tf.math.abs(rho) <= thresh, tf.float32)
 
                 dwl = t
 
@@ -124,11 +123,19 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
                 # Regularization update
                 muwalpha = mu * w + alpha
+                ## NumPy
+                # z[:, :, 0] = np.real(
+                #     np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 0]), eigs_DtD))
+                # )
+                # z[:, :, 1] = np.real(
+                #     np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 1]), eigs_DtD))
+                # )
+                ## Tensorflow
                 z[:, :, 0] = np.real(
-                    np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 0]), eigs_DtD))
+                    tf.signal.ifft2d(tf.math.divide(tf.signal.fft2d(muwalpha[:, :, 0]), eigs_DtD))
                 )
                 z[:, :, 1] = np.real(
-                    np.fft.ifft2(np.divide(np.fft.fft2(muwalpha[:, :, 1]), eigs_DtD))
+                    tf.signal.ifft2d(tf.math.divide(tf.signal.fft2d(muwalpha[:, :, 1]), eigs_DtD))
                 )
 
                 # Lagrange parameters update
@@ -142,6 +149,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
                 # End of iterations checking
                 norm_w_prev = np.linalg.norm(w_prev.flatten())
+                # norm_w_prev = tf.norm(w_prev.flatten())
                 if norm_w_prev == 0:
                     w_prev = w
                     continue
@@ -150,6 +158,8 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                         np.linalg.norm(w.flatten() - w_prev.flatten()) / norm_w_prev
                     )
                     if change < param["changeTol"]:
+                        if verbose:
+                            _LOGGER.info(f'Converged scale {l} and warp {iWarp} in {it=} iterations')
                         break
                     w_prev = w
 

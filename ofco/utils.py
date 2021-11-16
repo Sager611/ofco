@@ -1,9 +1,14 @@
+import logging
+
 import numpy as np
 from scipy.signal import correlate2d, medfilt2d
 from scipy.ndimage.morphology import binary_dilation
+import tensorflow as tf
 import cv2
 
 from .warping import interp2_bicubic
+
+_LOGGER = logging.getLogger('ofco')
 
 
 def partial_deriv(imgs, w, deriv_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
@@ -329,3 +334,63 @@ def eigsDtD(sx, sy, lmbd, mu):
     a[-1, 0] = -1 / res[0] ** 2
     fGtG = np.fft.fftn(a)
     return lmbd * np.real(fGtG) ** 2 + mu
+
+
+def get_strategy(strategy: str = 'default'):
+    """Load and return the specified Tensorflow's strategy.
+
+    Parameters
+    ----------
+    strategy : string 
+        either,
+
+        * 'default' (CPU, defaults to this)
+        * 'GPU' (Uses Tensorflow's MirroredStrategy)
+        * 'TPU'
+        * 'GPU:<gpu-index>',
+            * If ``strategy`` is 'GPU', then use all GPUs.
+            * If ``strategy`` is 'GPU:0', then use GPU 0.
+            * If ``strategy`` is 'GPU:1', then use GPU 1.
+            * etc.
+
+    Returns
+    -------
+    :func:`tf.distribute.Strategy`
+        Tensorflow strategy
+    """
+    # print device info
+    _LOGGER.info(f"Num Physical GPUs Available: {len(tf.config.list_physical_devices('GPU'))}")
+    _LOGGER.info(f"Num Logical  GPUs Available: {len(tf.config.list_logical_devices('GPU'))}")
+    _LOGGER.info(f"Num TPUs Available: {len(tf.config.list_logical_devices('TPU'))}")
+
+    if not tf.test.is_built_with_cuda():
+        logging.warning('Tensorflow is not built with GPU support!')
+
+    # try to allow growth in case other people are using the GPUs
+    for gpu in tf.config.list_physical_devices('GPU'):
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        except:
+            _LOGGER.warning(f'GPU device "{gpu}" is already initialized.')
+
+    # choose strategy
+    if strategy.lower() == 'tpu' and tf.config.list_physical_devices('TPU'):
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='')
+        tf.config.experimental_connect_to_cluster(resolver)
+        # This is the TPU initialization code that has to be at the beginning.
+        tf.tpu.experimental.initialize_tpu_system(resolver)
+
+        strategy = tf.distribute.TPUStrategy(resolver)
+        _LOGGER.info(r'using TPU strategy.')
+    if strategy.lower()[:3] == 'gpu' and tf.config.list_physical_devices('GPU'):
+        if len(strategy) > 3:
+            strategy = tf.distribute.MirroredStrategy([strategy])
+        else:
+            strategy = tf.distribute.MirroredStrategy()
+        _LOGGER.info(r'using GPU "MirroredStrategy" strategy.')
+    else:
+        # use default strategy
+        strategy = tf.distribute.get_strategy()
+        _LOGGER.info(r'using default strategy.')
+
+    return strategy
