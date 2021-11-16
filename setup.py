@@ -22,5 +22,7 @@ setup(
         "docopt",
         "sphinx",
         "pytest",
+        "pycuda",
+        "scikit-cuda"
     ],
 )
