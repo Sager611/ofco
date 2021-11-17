@@ -10,6 +10,9 @@ import skcuda.fft as cu_fft
 
 from .utils import eigsDtD, partial_deriv, post_process
 
+_LOGGER = logging.getLogger('ofco')
+
+
 
 def fft2_gpu(x, fftshift=False):
     ''' This function produce an output that is 
@@ -23,7 +26,7 @@ def fft2_gpu(x, fftshift=False):
     n1, n2 = x.shape
     
     # From numpy array to GPUarray
-    # xgpu = gpuarray.to_gpu(x)
+    xgpu = gpuarray.to_gpu(x)
     
     # Initialise output GPUarray 
     # For real to complex transformations, the fft function computes 
@@ -66,7 +69,7 @@ def ifft2_gpu(y, fftshift=False):
         y2 = np.asarray(y[:,0:n2//2 + 1], np.complex64)
     else:
         y2 = np.asarray(np.fft.ifftshift(y)[:,:n2//2+1], np.complex64)
-    # ygpu = gpuarray.to_gpu(y2) 
+    ygpu = gpuarray.to_gpu(y2)
      
     # Initialise empty output GPUarray 
     x = gpuarray.empty((n1,n2), np.float32)
@@ -159,17 +162,15 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
         for iWarp in range(param["nbWarps"]):
             w_prev = wl
-            dwl = gpuarray.to_gpu(np.zeros((wl.shape)))  # changed line
+            dwl = (np.zeros((wl.shape)))  # changed line
 
-            alpha = gpuarray.to_gpu(np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
-            z = gpuarray.to_gpu(np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
+            alpha = (np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
+            z = (np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
 
             # Pre-computations
             It, Ix, Iy = partial_deriv(np.stack([I1, I2], axis=2), wl, deriv_filter)
 
-            It, Ix, Iy = [gpuarray.to_gpu(I) for I in [It, Ix, Iy]]
-            
-            wl = gpuarray.to_gpu(wl)
+            wl = (wl)
             
             Igrad = Ix ** 2 + Iy ** 2 + 1e-3
             thresh = Igrad / munu
@@ -200,9 +201,9 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                 # Regularization update
                 muwalpha = mu * w + alpha
                 z[:, :, 0] = \
-                    ifft2_gpu((fft2_gpu(muwalpha[:, :, 0]) / eigs_DtD))
+                    ifft2_gpu((fft2_gpu((muwalpha[:, :, 0])) / eigs_DtD))
                 z[:, :, 1] = \
-                    ifft2_gpu((fft2_gpu(muwalpha[:, :, 1]) / eigs_DtD))
+                    ifft2_gpu((fft2_gpu((muwalpha[:, :, 1])) / eigs_DtD))
 
                 # Lagrange parameters update
                 alpha = alpha + mu * (w - z)
@@ -224,7 +225,7 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                     )
                     if change < param["changeTol"]:
                         if verbose:
-                            print(f'Layer {l} warp {iWarp} converged in {it=} iterations')
+                            _LOGGER.info(f'Converged scale {l} and warp {iWarp} in {it=} iterations')
                         break
                     w_prev = w
 
