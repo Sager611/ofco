@@ -4,6 +4,7 @@ from skimage import transform
 import numpy as np
 
 import pycuda.autoinit
+from pycuda.tools import make_default_context
 import pycuda.gpuarray as gpuarray
 import skcuda.fft as cu_fft
 
@@ -22,7 +23,7 @@ def fft2_gpu(x, fftshift=False):
     n1, n2 = x.shape
     
     # From numpy array to GPUarray
-    xgpu = gpuarray.to_gpu(x)
+    # xgpu = gpuarray.to_gpu(x)
     
     # Initialise output GPUarray 
     # For real to complex transformations, the fft function computes 
@@ -65,7 +66,7 @@ def ifft2_gpu(y, fftshift=False):
         y2 = np.asarray(y[:,0:n2//2 + 1], np.complex64)
     else:
         y2 = np.asarray(np.fft.ifftshift(y)[:,:n2//2+1], np.complex64)
-    ygpu = gpuarray.to_gpu(y2) 
+    # ygpu = gpuarray.to_gpu(y2) 
      
     # Initialise empty output GPUarray 
     x = gpuarray.empty((n1,n2), np.float32)
@@ -81,7 +82,9 @@ def ifft2_gpu(y, fftshift=False):
 
 
 def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
-
+    # needed for multithread and multiprocess execution
+    # make_default_context()
+    
     sigmaPreproc = 0.9
     I1 = gaussian_filter(I1, sigmaPreproc, mode="mirror")
     I2 = gaussian_filter(I2, sigmaPreproc, mode="mirror")
@@ -136,9 +139,6 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
 
     # Coarse to fine
     for l, I1, I2 in zip(range(c2fLevels - 1, -1, -1), I1C2f, I2C2f):
-        if verbose:
-            print("\nScale {}\n".format(l))
-
         # Scaled data
         sigmaS = sigmaSSegC2f[l]
         lmbd = lambdaC2f[l]
@@ -158,18 +158,19 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
         eigs_DtD = eigsDtD(I1.shape[0], I1.shape[1], lmbd, mu)
 
         for iWarp in range(param["nbWarps"]):
-            if verbose:
-                print("Warp {}\n".format(iWarp))
-
             w_prev = wl
-            dwl = np.zeros((wl.shape))
+            dwl = gpuarray.to_gpu(np.zeros((wl.shape)))  # changed line
 
-            alpha = np.zeros((I1.shape[0], I1.shape[1], 2))
-            z = np.zeros((I1.shape[0], I1.shape[1], 2))
+            alpha = gpuarray.to_gpu(np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
+            z = gpuarray.to_gpu(np.zeros((I1.shape[0], I1.shape[1], 2)))  # changed line
 
             # Pre-computations
             It, Ix, Iy = partial_deriv(np.stack([I1, I2], axis=2), wl, deriv_filter)
 
+            It, Ix, Iy = [gpuarray.to_gpu(I) for I in [It, Ix, Iy]]
+            
+            wl = gpuarray.to_gpu(wl)
+            
             Igrad = Ix ** 2 + Iy ** 2 + 1e-3
             thresh = Igrad / munu
 
@@ -199,9 +200,9 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                 # Regularization update
                 muwalpha = mu * w + alpha
                 z[:, :, 0] = \
-                    ifft2_gpu(np.divide(fft2_gpu(muwalpha[:, :, 0]), eigs_DtD))
+                    ifft2_gpu((fft2_gpu(muwalpha[:, :, 0]) / eigs_DtD))
                 z[:, :, 1] = \
-                    ifft2_gpu(np.divide(fft2_gpu(muwalpha[:, :, 1]), eigs_DtD))
+                    ifft2_gpu((fft2_gpu(muwalpha[:, :, 1]) / eigs_DtD))
 
                 # Lagrange parameters update
                 alpha = alpha + mu * (w - z)
@@ -222,6 +223,8 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                         np.linalg.norm(w.flatten() - w_prev.flatten()) / norm_w_prev
                     )
                     if change < param["changeTol"]:
+                        if verbose:
+                            print(f'Layer {l} warp {iWarp} converged in {it=} iterations')
                         break
                     w_prev = w
 

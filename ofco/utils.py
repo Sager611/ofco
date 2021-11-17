@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import correlate2d, medfilt2d
 from scipy.ndimage.morphology import binary_dilation
+import pycuda.gpuarray as gpuarray
 import cv2
 
 from .warping import interp2_bicubic
@@ -31,8 +32,9 @@ def partial_deriv(imgs, w, deriv_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
         Derivative with respect to y.
     """
     xx, yy = np.meshgrid(np.arange(imgs.shape[1]), np.arange(imgs.shape[0]))
-    xi = xx + w[:, :, 0]
-    yi = yy + w[:, :, 1]
+    xx, yy = (xx), (yy)
+    xi = w[:, :, 0] + xx
+    yi = w[:, :, 1] + yy
     [warped_img, Ix, Iy] = interp2_bicubic(imgs[:, :, 1], xi, yi, deriv_filter)
     indx = np.isnan(warped_img)
     It = warped_img - imgs[:, :, 0]
