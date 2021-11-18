@@ -1,10 +1,9 @@
 from scipy.ndimage import gaussian_filter
 import math
+import logging
 from skimage import transform
 import numpy as np
 
-import pycuda.autoinit
-from pycuda.tools import make_default_context
 import pycuda.gpuarray as gpuarray
 import skcuda.fft as cu_fft
 
@@ -54,7 +53,7 @@ def fft2_gpu(x, fftshift=False):
     else:
         yout = np.fft.fftshift(np.hstack((left,right)))
 
-    return yout.astype('complex128')  
+    return yout.astype('complex64')  
 
 
 def ifft2_gpu(y, fftshift=False):
@@ -66,10 +65,15 @@ def ifft2_gpu(y, fftshift=False):
     
     # From numpy array to GPUarray. Take only the first n2/2+1 non redundant FFT coefficients
     if fftshift is False:
-        y2 = np.asarray(y[:,0:n2//2 + 1], np.complex64)
+        y2 = y[:,0:n2//2 + 1].astype('complex64')
     else:
         y2 = np.asarray(np.fft.ifftshift(y)[:,:n2//2+1], np.complex64)
-    ygpu = gpuarray.to_gpu(y2)
+        ygpu = gpuarray.to_gpu(y2)
+    if type(y2) is gpuarray.GPUArray:
+        ygpu = y2
+    else:
+        print('TRANSFERING TO GPU!')
+        ygpu = gpuarray.to_gpu(y2)
      
     # Initialise empty output GPUarray 
     x = gpuarray.empty((n1,n2), np.float32)
@@ -85,9 +89,6 @@ def ifft2_gpu(y, fftshift=False):
 
 
 def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
-    # needed for multithread and multiprocess execution
-    # make_default_context()
-    
     sigmaPreproc = 0.9
     I1 = gaussian_filter(I1, sigmaPreproc, mode="mirror")
     I2 = gaussian_filter(I2, sigmaPreproc, mode="mirror")
@@ -229,6 +230,8 @@ def optical_flow_estimation(I1, I2, sz0, param, verbose=False, initial_w=None):
                         break
                     w_prev = w
 
+            if verbose and it == param["maxIters"]-1:
+                _LOGGER.info(f'Scale {l} and warp {iWarp} did not converge in {param["nbWarps"]} iterations')
             wl = wl + dwl
             wl = post_process(wl, I1, I2, sigmaS, param["sigmaC"])
     return wl

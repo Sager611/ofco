@@ -15,6 +15,7 @@ Options:
 
 import os
 import time
+import logging
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from timeit import default_timer as timer
@@ -22,9 +23,13 @@ import numpy as np
 from skimage import io
 from docopt import docopt
 
-from .utils import default_parameters, midway, crop_fit_size_center
+import pycuda.driver as cuda
+
+from .utils import default_parameters, midway, crop_fit_size_center, GPUThread
 from .warping import bilinear_interpolate
 from .optflow import optical_flow_estimation
+
+_LOGGER = logging.getLogger('ofco')
 
 
 def compute_motion(I1, I2, param, initial_w=None, verbose=False):
@@ -61,7 +66,6 @@ def parallel_compute_motion(t):
 
 
 def apply_motion_field(stack1, stack2, w, frames):
-
     stack1_warped = stack1
 
     if stack2 is not None:
@@ -122,6 +126,11 @@ def motion_compensate(
     )
 
     i1 = stack1_rescale[frames[0], :, :]
+
+    # pycuda
+    dev = cuda.Device(0)
+    ctx = dev.make_context()
+
     if parallel:
         #############################################################
         # Adrian Sager 15/11/2021:
@@ -142,13 +151,27 @@ def motion_compensate(
                 _LOGGER.info(f'COMPUTED FRAME {t} IN {t2-t1 : .2f}s \n')
             return res
 
-        with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(parallel_compute_motion,
-                                t, stack1_rescale[t + 1, :, :])
-                for t in range(len(frames) - 1)
-            ]
-            w = np.array([f.result() for f in futures])
+        # with ThreadPoolExecutor() as executor:
+        #     futures = [
+        #         executor.submit(parallel_compute_motion,
+        #                         t, stack1_rescale[t + 1, :, :])
+        #         for t in range(len(frames) - 1)
+        #     ]
+        #     w = np.array([f.result() for f in futures])
+        
+        num_gpu_devices = cuda.Device.count()
+        threads = []
+        try:
+            for t in range(len(frames) - 1):
+                gpu_thread = GPUThread(0, parallel_compute_motion, t, stack1_rescale[t + 1, :, :])
+                gpu_thread.start()
+                threads += [gpu_thread]
+
+            w = np.array([t.join() for t in threads])
+        except:
+            for t in threads:
+                t.kill()
+            
 
         ## PROCESS-PARALLEL
         # def parallel_compute_motion(t):

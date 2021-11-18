@@ -1,11 +1,76 @@
+import time
+import logging
+import threading
+
 import numpy as np
 from scipy.signal import correlate2d, medfilt2d
 from scipy.ndimage.morphology import binary_dilation
 import pycuda.gpuarray as gpuarray
 import cv2
+import pycuda
+import pycuda.driver as cuda
+from pycuda.compiler import SourceModule
 
 from .warping import interp2_bicubic
 
+_LOGGER = logging.getLogger('ofco')
+
+
+class GPUThread(threading.Thread):
+    """GPUThread.
+    
+    .. note::
+        Taken from: `pycuda multi-threading tutorial <https://github.com/inducer/pycuda/blob/ca345f2f59eec4c60832dad5187ef75b396315b3/examples/from-wiki/multiple_threads.py/>`_
+    """
+    def __init__(self, gpu_number, func, *args, **kwargs):
+        threading.Thread.__init__(self)
+
+        self.gpu_number = gpu_number
+        self.func = func
+        self.f_args = args
+        self.f_kwargs = kwargs
+
+        self.dev = None
+        self.ctx = None
+
+        self._return = None
+
+    def start(self):
+        self.__run_backup = self.run
+        self.run = self.__run
+        threading.Thread.start(self)
+
+    def __run(self):
+        sys.settrace(self.globaltrace)
+        self.__run_backup()
+        self.run = self.__run_backup
+
+    def run(self):
+        # NOTE: creating a device context is expensive!
+        t1 = time.perf_counter()
+        self.dev = cuda.Device(self.gpu_number)
+        self.ctx = self.dev.make_context()
+        t2 = time.perf_counter()
+        _LOGGER.info(f'Initialized GPU:{self.gpu_number} context in {t2-t1:.2f}s')
+
+        exc = None
+        try:
+            self._return = self.func(*self.f_args, **self.f_kwargs)
+        except BaseException as e:
+            exc = e
+            _LOGGER.warn("unsuccessful exit from thread %d" % self.gpu_number)
+        else:
+            _LOGGER.info("successful exit from thread %d" % self.gpu_number)
+
+        self.ctx.pop()
+        del self.ctx
+        
+        if exc is not None:
+            raise exc
+
+    def join(self, *args):
+        threading.Thread.join(self, *args)
+        return self._return
 
 def partial_deriv(imgs, w, deriv_filter=np.array([[1, -8, 0, 8, -1]]) / 12):
     """
