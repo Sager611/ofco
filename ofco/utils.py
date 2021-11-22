@@ -1,3 +1,4 @@
+import sys
 import time
 import logging
 import threading
@@ -21,29 +22,59 @@ class GPUThread(threading.Thread):
     
     .. note::
         Taken from: `pycuda multi-threading tutorial <https://github.com/inducer/pycuda/blob/ca345f2f59eec4c60832dad5187ef75b396315b3/examples/from-wiki/multiple_threads.py/>`_
+        
+    .. note::
+        Modified to allow for tracing, and thus easy to kill
     """
-    def __init__(self, gpu_number, func, *args, **kwargs):
+    def __init__(self, gpu_number, func, *args, timeout: float = None, **kwargs):
         threading.Thread.__init__(self)
 
         self.gpu_number = gpu_number
         self.func = func
         self.f_args = args
         self.f_kwargs = kwargs
+        self.timeout = timeout
 
         self.dev = None
         self.ctx = None
 
         self._return = None
+        self.killed = False
 
     def start(self):
+        # modified method to allow for tracing
         self.__run_backup = self.run
         self.run = self.__run
+        
+        self._start_t = time.perf_counter()
+        
         threading.Thread.start(self)
 
     def __run(self):
+        # method to allow for tracing
         sys.settrace(self.globaltrace)
         self.__run_backup()
         self.run = self.__run_backup
+
+    def globaltrace(self, frame, event, arg):
+        # method to allow for tracing
+        if event == 'call':
+            return self.localtrace
+        else:
+            return None
+
+    def localtrace(self, frame, event, arg):
+        # method to allow for tracing
+        if self.timeout and time.perf_counter() - self._start_t >= self.timeout:
+            self.killed = True
+            _LOGGER.warn(f'Killed thread for exceeding its timeout of {self.timeout:.2f}s.')
+        if self.killed:
+            if event == 'line':
+                raise SystemExit()
+        return self.localtrace
+
+    def kill(self):
+        self.killed = True
 
     def run(self):
         # NOTE: creating a device context is expensive!
@@ -58,12 +89,13 @@ class GPUThread(threading.Thread):
             self._return = self.func(*self.f_args, **self.f_kwargs)
         except BaseException as e:
             exc = e
-            _LOGGER.warn("unsuccessful exit from thread %d" % self.gpu_number)
+            _LOGGER.warn("function threw an exception")
         else:
-            _LOGGER.info("successful exit from thread %d" % self.gpu_number)
+            _LOGGER.debug("successful function execution")
 
         self.ctx.pop()
         del self.ctx
+        _LOGGER.info("successfully popped and deleted cuda context")
         
         if exc is not None:
             raise exc

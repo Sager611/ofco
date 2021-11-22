@@ -56,15 +56,6 @@ def compute_motion(I1, I2, param, initial_w=None, verbose=False):
     return w
 
 
-def parallel_compute_motion(t):
-    i2 = global_stack1_rescale[t + 1, :, :].copy()
-    [i10, i2] = midway(global_i1.copy(), i2)
-    if global_initial_w is not None:
-        return compute_motion(i10, i2, global_param, global_initial_w[t])
-    else:
-        return compute_motion(i10, i2, global_param)
-
-
 def apply_motion_field(stack1, stack2, w, frames):
     stack1_warped = stack1
 
@@ -168,9 +159,13 @@ def motion_compensate(
                 threads += [gpu_thread]
 
             w = np.array([t.join() for t in threads])
-        except:
+        except BaseException as e:
             for t in threads:
                 t.kill()
+            for t in threads:
+                t.join()
+            _LOGGER.info('Successfully stopped all threads.')
+            raise e
             
 
         ## PROCESS-PARALLEL
