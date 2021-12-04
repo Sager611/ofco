@@ -116,7 +116,7 @@ def motion_compensate(
     )
 
     i1 = stack1_rescale[frames[0], :, :]
-    with get_strategy('TPU').scope():
+    with get_strategy('GPU').scope():
         if parallel:
             #############################################################
             # Adrian Sager 15/11/2021:
